@@ -329,7 +329,7 @@ declare module "@twilio/video-react-native-sdk" {
 
     class TwilioStereoTonePlayer {
         preload(filename: string): Promise<boolean>;
-        play(filename: string, isLooping: boolean, volume: number, playbackSpeed: number): Promise<boolean>;
+        play(filename: string, isLooping: boolean, volume: number, playbackSpeed: number): Promise<void>;
         pause(): void;
         setVolume(volume: number): void;
         setPlaybackSpeed(speed: number): void;

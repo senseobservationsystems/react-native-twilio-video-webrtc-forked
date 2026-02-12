@@ -247,6 +247,7 @@ declare module "@twilio/video-react-native-sdk" {
         // DEPRECATED: Only available on iOS and will be removed in a future release
         autoInitializeCamera?: boolean;
         ref?: React.Ref<any>;
+        useCustomAudioDevice?: boolean;
     };
 
     export type iOSConnectParams = {
@@ -296,7 +297,8 @@ declare module "@twilio/video-react-native-sdk" {
         region?: string | null;
     };
 
-    class TwilioVideo extends React.Component<TwilioVideoProps> {
+    export type TrackPriority = 'LOW' | 'STANDARD' | 'HIGH' | 'NULL';
+    class TwilioVideo extends React.Component<TwilioVideoProps & { useCustomAudioDevice?: boolean }> {
         setLocalVideoEnabled: (enabled: boolean) => Promise<boolean>;
         setLocalAudioEnabled: (enabled: boolean) => Promise<boolean>;
         setLocalDataTrackEnabled: (enabled: boolean) => Promise<boolean>;
@@ -315,6 +317,8 @@ declare module "@twilio/video-react-native-sdk" {
         sendString: (message: string) => void;
         sendBinary: (base64Payload: string) => void;
         fetchRoom: () => void;
+        setTrackPriority: (trackSid: string, priority: TrackPriority) => void;
+        setStereoEnabled: (enabled: boolean) => Promise<boolean>;
     }
 
     class TwilioVideoLocalView extends React.Component<TwilioVideoLocalViewProps> {}
@@ -323,10 +327,21 @@ declare module "@twilio/video-react-native-sdk" {
 
     class TwilioVideoParticipantView extends React.Component<TwilioVideoParticipantViewProps> {}
 
+    class TwilioStereoTonePlayer {
+        preload(filename: string): Promise<boolean>;
+        play(filename: string, isLooping: boolean, volume: number, playbackSpeed: number): Promise<boolean>;
+        pause(): void;
+        setVolume(volume: number): void;
+        setPlaybackSpeed(speed: number): void;
+        release(filename: string): void;
+        terminate(): void;
+    }
+
     export {
         TwilioVideoLocalView,
         TwilioVideoScreenShareView,
         TwilioVideoParticipantView,
         TwilioVideo,
+        TwilioStereoTonePlayer,
     };
 }

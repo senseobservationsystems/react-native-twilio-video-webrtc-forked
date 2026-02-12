@@ -689,6 +689,16 @@ RCT_REMAP_METHOD(setLocalVideoEnabled,
     resolve(@(result));
 }
 
+RCT_REMAP_METHOD(setStereoEnabled,
+                 enabled : (BOOL) enabled setStereoEnabledWithResolver : (
+                         RCTPromiseResolveBlock) resolve rejecter : (
+                         RCTPromiseRejectBlock) reject) {
+    if (GLOBAL_AUDIO_DEVICE != nil) {
+        [GLOBAL_AUDIO_DEVICE makeStereo:enabled];
+    }
+    resolve(@(enabled));
+}
+
 RCT_EXPORT_METHOD(flipCamera) {
     if (self.camera) {
         AVCaptureDevicePosition position = self.camera.device.position;

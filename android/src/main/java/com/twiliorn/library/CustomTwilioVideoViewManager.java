@@ -89,6 +89,7 @@ public class CustomTwilioVideoViewManager extends SimpleViewManager<CustomTwilio
     private static final int TOGGLE_SCREEN_SHARING = 16;
     private static final int TOGGLE_DATA_TRACK = 17;
     private static final int FETCH_ROOM = 19;
+    private static final int SET_TRACK_PRIORITY = 20;
 
     @Override
     public String getName() {
@@ -223,6 +224,11 @@ public class CustomTwilioVideoViewManager extends SimpleViewManager<CustomTwilio
             case FETCH_ROOM:
                 view.fetchRoom();
                 break;
+            case SET_TRACK_PRIORITY:
+                String trackSid = args.getString(0);
+                String trackPriority = args.getString(1);
+                view.setTrackPriority(trackSid, trackPriority);
+                break;
         }
     }
 
@@ -322,6 +328,7 @@ public class CustomTwilioVideoViewManager extends SimpleViewManager<CustomTwilio
                 .put("toggleScreenSharing", TOGGLE_SCREEN_SHARING)
                 .put("toggleDataTrack", TOGGLE_DATA_TRACK)
                 .put("fetchRoom", FETCH_ROOM)
+                .put("setTrackPriority", SET_TRACK_PRIORITY)
                 .build();
     }
 }

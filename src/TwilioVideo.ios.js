@@ -374,6 +374,10 @@ export default class TwilioVideo extends Component {
      * @param {{transcription: string, participant: string, track: string, partialResults: boolean, stability?: number, languageCode: string, timestamp: string, sequenceNumber: number}}
      */
     onTranscriptionReceived: PropTypes.func,
+    /**
+     * Flag that enables the custom audio device. Required for `setStereoEnabled`
+     */
+    useCustomAudioDevice: PropTypes.bool,
   };
 
   constructor(props) {
@@ -381,6 +385,7 @@ export default class TwilioVideo extends Component {
 
     this._subscriptions = [];
     this._eventEmitter = new NativeEventEmitter(TWVideoModule);
+    this.useCustomAudioDevice = !!props.useCustomAudioDevice;
   }
 
   componentDidMount() {
@@ -443,12 +448,28 @@ export default class TwilioVideo extends Component {
   }
 
   /**
+   * Enable or disable stereo mode
+   */
+  setStereoEnabled(enabled) {
+    return TWVideoModule.setStereoEnabled(enabled);
+  }
+
+  /**
    * Enable or disable local data track
    * @param {boolean} enabled - Whether to enable data track
    * @returns {Promise<boolean>} Promise that resolves with the enabled state
    */
   setLocalDataTrackEnabled(enabled) {
     return TWVideoModule.setLocalDataTrackEnabled(enabled);
+  }
+
+  /**
+   * Specifies the priority a remote participants video track should get
+   * @param {*} trackSid the SID of the track setting the priority for
+   * @param {*} trackPriority the priority of the track. Can be low, standard, high or null
+   */
+  setTrackPriority (trackSid, trackPriority) {
+    TWVideoModule.setTrackPriority(trackSid, trackPriority)
   }
 
   /**
@@ -597,7 +618,7 @@ export default class TwilioVideo extends Component {
   }
 
   _startLocalAudio() {
-    TWVideoModule.startLocalAudio();
+    TWVideoModule.startLocalAudio(this.useCustomAudioDevice);
   }
 
   _stopLocalAudio() {

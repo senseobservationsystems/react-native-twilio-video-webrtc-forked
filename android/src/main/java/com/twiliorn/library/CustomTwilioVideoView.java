@@ -144,6 +144,7 @@ import tvi.webrtc.CameraEnumerationAndroid.CaptureFormat;
 import tvi.webrtc.HardwareVideoDecoderFactory;
 import tvi.webrtc.HardwareVideoEncoderFactory;
 import tvi.webrtc.VideoCodecInfo;
+import com.twiliorn.library.niceday.NDExtra;
 
 
 public class CustomTwilioVideoView extends View
@@ -287,6 +288,7 @@ public class CustomTwilioVideoView extends View
 
     private final ThemedReactContext themedReactContext;
     private final RCTEventEmitter eventEmitter;
+    private final NDExtra ndExtra;
 
     private AudioFocusRequest audioFocusRequest;
     private AudioAttributes playbackAttributes;
@@ -361,6 +363,7 @@ public class CustomTwilioVideoView extends View
         super(context);
         this.themedReactContext = context;
         this.eventEmitter = themedReactContext.getJSModule(RCTEventEmitter.class);
+        this.ndExtra = new NDExtra(context);
 
         // Set properties for Video Insights reporting
         System.setProperty(PRODUCT_NAME_KEY, TwilioVideoConstants.kTwilioVideoReactNativeName);
@@ -386,6 +389,7 @@ public class CustomTwilioVideoView extends View
         audioManager = (AudioManager) themedReactContext.getSystemService(Context.AUDIO_SERVICE);
         myNoisyAudioStreamReceiver = new BecomingNoisyReceiver();
         intentFilter = new IntentFilter(Intent.ACTION_HEADSET_PLUG);
+        intentFilter.addAction(NDExtra.BT_INTENT);
 
         // Start dedicated thread for RemoteDataTrack messages and create its handler
         dataTrackMessageThread.start();
@@ -624,6 +628,9 @@ public class CustomTwilioVideoView extends View
         if (themedReactContext.getCurrentActivity() != null) {
             themedReactContext.getCurrentActivity().setVolumeControlStream(AudioManager.USE_DEFAULT_STREAM_TYPE);
         }
+        if (ndExtra != null) {
+            ndExtra.cleanUp();
+        }
         /*
          * Always disconnect from the room before leaving the Activity to
          * ensure any memory allocated to the Room resource is freed.
@@ -766,6 +773,10 @@ public class CustomTwilioVideoView extends View
 
         if (this.roomName != null) {
             connectOptionsBuilder.roomName(this.roomName);
+        }
+
+        if (ndExtra != null) {
+            ndExtra.applyExtraParamsTo(connectOptionsBuilder);
         }
 
         if (localAudioTrack != null) {
@@ -1991,5 +2002,11 @@ public class CustomTwilioVideoView extends View
                 pushEvent(CustomTwilioVideoView.this, ON_DATATRACK_MESSAGE_RECEIVED, event);
             }
         };
+    }
+
+    public void setTrackPriority(String trackSid, String trackPriority) {
+        if (ndExtra != null) {
+            ndExtra.setTrackPriority(trackSid, trackPriority, room);
+        }
     }
 }

@@ -368,6 +368,7 @@ const nativeEvents = {
   toggleDataTrack: 17,
   sendBinary: 18,
   fetchRoom: 19,
+  setTrackPriority: 20,
 };
 
 class CustomTwilioVideoView extends Component {
@@ -572,6 +573,23 @@ class CustomTwilioVideoView extends Component {
   }
 
   /**
+   * Set bluetooth headset connection status
+   * @param {boolean} enabled - Whether bluetooth headset is connected
+   * @returns {Promise<boolean>} Promise that resolves with the enabled state
+   */
+  setBluetoothHeadsetConnected(enabled) {
+    this.runCommand(nativeEvents.toggleBluetoothHeadset, [enabled]);
+    return Promise.resolve(enabled);
+  }
+
+  /**
+   * Enable or disable stereo mode
+   */
+  setStereoEnabled(enabled) {
+    return Promise.resolve(enabled);
+  }
+
+  /**
    * Disable OpenSL ES audio
    */
   disableOpenSLES() {
@@ -584,6 +602,15 @@ class CustomTwilioVideoView extends Component {
    */
   toggleSoundSetup(speaker) {
     this.runCommand(nativeEvents.toggleSoundSetup, [speaker]);
+  }
+
+  /**
+   * Specifies the priority a remote participants video track should get
+   * @param {*} trackSid the SID of the track setting the priority for
+   * @param {*} trackPriority the priority of the track. Can be low, standard, high or null
+   */
+  setTrackPriority(trackSid, trackPriority) {
+    this.runCommand(nativeEvents.setTrackPriority, [trackSid, trackPriority]);
   }
 
 

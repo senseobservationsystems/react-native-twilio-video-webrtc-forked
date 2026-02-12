@@ -12,6 +12,10 @@
 #import "RCTTWVideoConstants.h"
 #import <UIKit/UIKit.h>
 #import <stdlib.h>
+#import "RCTTWCustomAudioDevice.h"
+#import "TwilioStereoTonePlayer.h"
+
+static RCTTWCustomAudioDevice* GLOBAL_AUDIO_DEVICE = nil;
 
 static NSString *roomDidConnect = @"roomDidConnect";
 static NSString *screenShareChanged = @"screenShareChanged";
@@ -447,7 +451,17 @@ RCT_EXPORT_METHOD(startLocalVideo) {
     return format;
 }
 
-RCT_EXPORT_METHOD(startLocalAudio) {
+RCT_EXPORT_METHOD(startLocalAudio:(BOOL)useCustomAudioDevice) {
+    // If this is enabled we use our custom Twilio Audio Device for audio rendering
+    if (useCustomAudioDevice) {
+        if (GLOBAL_AUDIO_DEVICE == nil) {
+            GLOBAL_AUDIO_DEVICE = [[RCTTWCustomAudioDevice alloc] init];
+            
+            TwilioVideoSDK.audioDevice = GLOBAL_AUDIO_DEVICE;
+            TwilioStereoTonePlayer.audioDevice = GLOBAL_AUDIO_DEVICE;
+        }
+    }
+
     self.localAudioTrack = [TVILocalAudioTrack trackWithOptions:nil
                                                         enabled:YES
                                                            name:@"microphone"];
@@ -794,6 +808,36 @@ RCT_REMAP_METHOD(setRemoteAudioEnabled,
         }
     }
     resolve(@(enabled));
+}
+
+-(TVITrackPriority)parsePriorityString:(NSString *)priority {
+    if (priority == nil) {
+        return nil;
+    }
+    
+    if ([[priority uppercaseString] isEqualToString:@"LOW"]) {
+        return TVITrackPriorityLow;
+    } else if ([[priority uppercaseString] isEqualToString:@"STANDARD"]) {
+        return TVITrackPriorityStandard;
+    } else if ([[priority uppercaseString] isEqualToString:@"HIGH"]) {
+        return TVITrackPriorityHigh;
+    } else if ([[priority uppercaseString] isEqualToString:@"NULL"]) {
+        return nil;
+    }
+    return nil;
+}
+
+RCT_EXPORT_METHOD(setTrackPriority:(NSString *)trackSid trackPriority:(NSString *)trackPriority) {
+    for (TVIRemoteParticipant *participant in [self.room remoteParticipants]) {
+        if (participant) {
+            for (TVIRemoteVideoTrackPublication *publication in participant.remoteVideoTracks) {
+              if ([publication.trackSid isEqualToString:trackSid]) {
+                  TVITrackPriority priority = [self parsePriorityString:trackPriority];
+                  [publication.remoteTrack setPriority:priority];
+              }
+            }
+        }
+    }
 }
 
 RCT_EXPORT_METHOD(toggleSoundSetup : (BOOL) speaker) {

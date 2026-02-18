@@ -1960,7 +1960,14 @@ public class CustomTwilioVideoView extends View
                     if (publication.getTrackSid().equals(trackSid)) {
                         track.addSink(v);
                     } else {
-                        track.removeSink(v);
+                        // Workaround for known Twilio SDK 7.x issue where removeSink
+                        // crashes with NPE on VideoSinkHintsProducer.getSinkHintsId()
+                        // when the view was never added as a sink to this track.
+                        try {
+                            track.removeSink(v);
+                        } catch (Exception e) {
+                            Log.d("CustomTwilioVideoView", "removeSink error (known Twilio SDK 7.x issue): " + e.getMessage());
+                        }
                     }
                 }
             }

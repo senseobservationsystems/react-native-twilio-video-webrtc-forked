@@ -36,6 +36,7 @@ public class TwilioVideoPreviewManager extends SimpleViewManager<TwilioVideoPrev
         } else {
             view.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL);
         }
+        view.requestLayout();
     }
 
     @ReactProp(name = "applyZOrder", defaultBoolean = true)

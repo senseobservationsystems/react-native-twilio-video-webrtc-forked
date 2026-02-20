@@ -134,4 +134,22 @@ public class RNVideoViewGroup extends ViewGroup {
         }
         surfaceViewRenderer.layout(l, t, r, b);
     }
+
+    // requestLayout and measureAndLayout is a hack to make sure that
+    // layout is always triggered whenever one of the props is changing
+    @Override
+    public void requestLayout() {
+        super.requestLayout();
+        post(measureAndLayout);
+    }
+
+    private final Runnable measureAndLayout = new Runnable() {
+        @Override
+        public void run() {
+            measure(
+                MeasureSpec.makeMeasureSpec(getWidth(), MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(getHeight(), MeasureSpec.EXACTLY));
+            layout(getLeft(), getTop(), getRight(), getBottom());
+        }
+    };
 }

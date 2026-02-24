@@ -364,8 +364,10 @@ RCT_EXPORT_METHOD(startLocalVideo) {
         return;
     }
     self.localVideoTrack = [TVILocalVideoTrack trackWithSource:self.camera
-                                                       enabled:NO
+                                                       enabled:YES
                                                           name:@"camera"];
+    // Start camera capture so frames are produced when the track is published
+    [self startCameraCapture:@"front"];
 }
 
 - (void)startCameraCapture:(NSString *)cameraType {
@@ -470,6 +472,22 @@ RCT_EXPORT_METHOD(startLocalAudio:(BOOL)useCustomAudioDevice) {
 RCT_EXPORT_METHOD(stopLocalVideo) { [self clearCameraInstance]; }
 
 RCT_EXPORT_METHOD(stopLocalAudio) { self.localAudioTrack = nil; }
+
+// Restore audio routing override so Bluetooth headphones receive audio instead of earpiece.
+// AVAudioSessionModeVideoChat defaults to earpiece in VOIP sessions; this lets callers
+// explicitly route to speaker (true) or back to default/BT (false).
+RCT_EXPORT_METHOD(toggleSoundSetup:(BOOL)speaker) {
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    NSError *error = nil;
+    if (speaker) {
+        [session overrideOutputAudioPort:AVAudioSessionPortOverrideSpeaker error:&error];
+    } else {
+        [session overrideOutputAudioPort:AVAudioSessionPortOverrideNone error:&error];
+    }
+    if (error) {
+        NSLog(@"[RCTTWVideoModule] toggleSoundSetup error: %@", error);
+    }
+}
 
 RCT_EXPORT_METHOD(publishLocalVideo) {
     // Create the video track if it doesn't exist

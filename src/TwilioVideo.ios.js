@@ -498,6 +498,17 @@ export default class TwilioVideo extends Component {
   }
 
   /**
+   * Toggle audio output between speaker and headset/Bluetooth.
+   * Call toggleSoundSetup(false) to route audio to the default output (including BT headphones).
+   * Call toggleSoundSetup(true) to force audio to the loudspeaker.
+   * Note: AVAudioSessionModeVideoChat defaults to earpiece in VOIP sessions; this overrides that.
+   * @param {boolean} speaker - true to force loudspeaker, false to restore default/BT routing
+   */
+  toggleSoundSetup(speaker) {
+    TWVideoModule.toggleSoundSetup(speaker);
+  }
+
+  /**
    * Get connection statistics
    */
   getStats() {

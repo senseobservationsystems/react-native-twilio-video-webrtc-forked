@@ -895,7 +895,13 @@ public class CustomTwilioVideoView extends View
              */
             audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
             setAudioType();
-            getContext().registerReceiver(myNoisyAudioStreamReceiver, intentFilter);
+            // Android 14+ (API 34) requires an explicit RECEIVER_EXPORTED/NOT_EXPORTED flag.
+            // This receiver handles internal headset/BT intents so NOT_EXPORTED is correct.
+            if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                getContext().registerReceiver(myNoisyAudioStreamReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED);
+            } else {
+                getContext().registerReceiver(myNoisyAudioStreamReceiver, intentFilter);
+            }
 
         } else {
             if (android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {

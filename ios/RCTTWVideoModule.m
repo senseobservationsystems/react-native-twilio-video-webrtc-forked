@@ -355,12 +355,6 @@ RCT_EXPORT_METHOD(setRemoteAudioPlayback : (NSString *)
 }
 
 RCT_EXPORT_METHOD(startLocalVideo) {
-    // Only pre-create the camera source and track here.
-    // The track is created with enabled:NO — connect will enable it
-    // and start capture via _createVideoTrack to avoid double-capture issues.
-    if (self.localVideoTrack != nil) {
-        return;
-    }
     TVICameraSourceOptions *options = [TVICameraSourceOptions
             optionsWithBlock:^(TVICameraSourceOptionsBuilder *_Nonnull builder) {
 
@@ -370,8 +364,10 @@ RCT_EXPORT_METHOD(startLocalVideo) {
         return;
     }
     self.localVideoTrack = [TVILocalVideoTrack trackWithSource:self.camera
-                                                       enabled:NO
+                                                       enabled:YES
                                                           name:@"camera"];
+    // Start camera capture so frames are produced when the track is published
+    [self startCameraCapture:@"front"];
 }
 
 - (void)startCameraCapture:(NSString *)cameraType {

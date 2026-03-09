@@ -148,6 +148,13 @@ export default class TwilioVideo extends Component {
     onDataTrackMessageReceived: PropTypes.func,
 
     /**
+     * Called when a debug log is received from native
+     * 
+     * @param {{message: string, timestamp: number}}
+     */
+    onDebugLog: PropTypes.func,
+
+    /**
      * Callback that is called when data track is toggled.
      *
      * @param {{dataEnabled: boolean}}
@@ -900,6 +907,13 @@ export default class TwilioVideo extends Component {
       this._eventEmitter.addListener("onTranscriptionReceived", (data) => {
         if (this.props.onTranscriptionReceived) {
           this.props.onTranscriptionReceived(data);
+        }
+      }),
+      this._eventEmitter.addListener("onDebugLog", (data) => {
+        if (this.props.onDebugLog) {
+          this.props.onDebugLog(data);
+        } else {
+          console.log("[DEBUG-VIDEO] Native Log:", data.message);
         }
       }),
     ];

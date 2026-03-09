@@ -11,6 +11,7 @@
 #import "RCTTWSerializable.h"
 #import "RCTTWVideoConstants.h"
 #import <UIKit/UIKit.h>
+#import <CoreMedia/CoreMedia.h>
 #import <stdlib.h>
 #import "RCTTWCustomAudioDevice.h"
 #import "TwilioStereoTonePlayer.h"
@@ -72,6 +73,7 @@ static NSString *networkQualityLevelsChanged = @"networkQualityLevelsChanged";
 static NSString *dataChanged = @"dataChanged";
 static NSString *roomFetched = @"onRoomFetched";
 static NSString *transcriptionReceived = @"onTranscriptionReceived";
+static NSString *debugLog = @"onDebugLog";
 
 static const char *kTWProductNameKey = "com.twilio.video.product.name";
 static const char *kTWProductVersionKey = "com.twilio.video.product.version";
@@ -271,8 +273,19 @@ RCT_EXPORT_MODULE();
         remoteDataTrackUnpublished,
         remoteDataTrackSubscriptionFailed,
         transcriptionReceived,
-
+        debugLog,
     ];
+}
+
+// Helper: log to both native console AND send as a React Native event so JS can see it
+- (void)debugLog:(NSString *)message {
+    NSLog(@"[DEBUG-VIDEO] %@", message);
+    if (_listening) {
+        [self sendEventWithName:debugLog body:@{
+            @"message": message,
+            @"timestamp": @([[NSDate date] timeIntervalSince1970])
+        }];
+    }
 }
 
 - (void)addLocalView:(TVIVideoView *)view {
@@ -355,23 +368,28 @@ RCT_EXPORT_METHOD(setRemoteAudioPlayback : (NSString *)
 }
 
 RCT_EXPORT_METHOD(startLocalVideo) {
+    [self debugLog:[NSString stringWithFormat:@"startLocalVideo called. Existing localVideoTrack: %@, camera: %@", self.localVideoTrack, self.camera]];
     TVICameraSourceOptions *options = [TVICameraSourceOptions
             optionsWithBlock:^(TVICameraSourceOptionsBuilder *_Nonnull builder) {
 
             }];
     self.camera = [[TVICameraSource alloc] initWithOptions:options delegate:self];
     if (self.camera == nil) {
+        [self debugLog:@"startLocalVideo: camera is nil, returning"];
         return;
     }
     self.localVideoTrack = [TVILocalVideoTrack trackWithSource:self.camera
                                                        enabled:YES
                                                           name:@"camera"];
+    [self debugLog:[NSString stringWithFormat:@"startLocalVideo: created track=%@, enabled=%d, source=%@", self.localVideoTrack, self.localVideoTrack.isEnabled, self.localVideoTrack.source]];
     // Start camera capture so frames are produced when the track is published
     [self startCameraCapture:@"front"];
 }
 
 - (void)startCameraCapture:(NSString *)cameraType {
+    [self debugLog:[NSString stringWithFormat:@"startCameraCapture called with type=%@, camera=%@", cameraType, self.camera]];
     if (self.camera == nil) {
+        [self debugLog:@"startCameraCapture: camera is nil, returning"];
         return;
     }
     AVCaptureDevice *camera;
@@ -387,24 +405,31 @@ RCT_EXPORT_METHOD(startLocalVideo) {
     TVIVideoFormat *format = [self videoFormatForCameraDevice:camera];
 
     if (format != nil) {
+        [self debugLog:[NSString stringWithFormat:@"startCameraCapture: starting with format width=%lu, height=%lu, fps=%lu", (unsigned long)format.dimensions.width, (unsigned long)format.dimensions.height, (unsigned long)format.frameRate]];
         [self.camera
                 startCaptureWithDevice:camera
                                 format:format
                             completion:^(AVCaptureDevice *device,
                                          TVIVideoFormat *startFormat, NSError *error) {
-                              if (!error) {
-                                  for (TVIVideoView *renderer in self.localVideoTrack
-                                               .renderers) {
-                                      [self updateLocalViewMirroring:renderer];
-                                  }
-                                  [self sendEventCheckingListenerWithName:cameraDidStart
-                                                                     body:nil];
-                              }
+                               if (error) {
+                                   [self debugLog:[NSString stringWithFormat:@"startCameraCapture: error starting capture: %@", error]];
+                               } else {
+                                   [self debugLog:@"startCameraCapture: capture started successfully"];
+                                   for (TVIVideoView *renderer in self.localVideoTrack
+                                                .renderers) {
+                                       [self updateLocalViewMirroring:renderer];
+                                   }
+                                   [self sendEventCheckingListenerWithName:cameraDidStart
+                                                                      body:nil];
+                               }
                             }];
+    } else {
+        [self debugLog:@"startCameraCapture: could not determine a valid video format!"];
     }
 }
 
 - (TVIVideoFormat *)videoFormatForCameraDevice:(AVCaptureDevice *)camera {
+    [self debugLog:[NSString stringWithFormat:@"videoFormatForCameraDevice called. camera=%@, requestedVideoFormat=%@", camera, self.requestedVideoFormat]];
     TVIVideoFormat *format = nil;
 
     if (self.requestedVideoFormat != nil) {
@@ -414,42 +439,25 @@ RCT_EXPORT_METHOD(startLocalVideo) {
         id heightValue = self.requestedVideoFormat[@"height"];
         id frameRateValue = self.requestedVideoFormat[@"frameRate"];
 
-        NSNumber *width = ([widthValue isKindOfClass:[NSNumber class]]) ? widthValue : nil;
-        NSNumber *height = ([heightValue isKindOfClass:[NSNumber class]]) ? heightValue : nil;
-        NSNumber *frameRate = ([frameRateValue isKindOfClass:[NSNumber class]]) ? frameRateValue : nil;
+        NSUInteger width = (widthValue && ![widthValue isKindOfClass:[NSNull class]]) ? [widthValue unsignedIntegerValue] : 0;
+        NSUInteger height = (heightValue && ![heightValue isKindOfClass:[NSNull class]]) ? [heightValue unsignedIntegerValue] : 0;
+        NSUInteger frameRate = (frameRateValue && ![frameRateValue isKindOfClass:[NSNull class]]) ? [frameRateValue unsignedIntegerValue] : 0;
 
-        BOOL hasCustomFormat =
-                width != nil &&
-                height != nil &&
-                frameRate != nil &&
-                [width intValue] > 0 &&
-                [height intValue] > 0 &&
-                [frameRate unsignedIntegerValue] > 0;
-
-        if (hasCustomFormat) {
-            NSUInteger fps = [frameRate unsignedIntegerValue];
-            format = RCTTWVideoModuleCameraSourceSelectFittingFormat(
-                    camera,
-                    [width intValue],
-                    [height intValue],
-                    fps);
+        if (width > 0 && height > 0) {
+            TVIVideoFormat *customFormat = [[TVIVideoFormat alloc] init];
+            customFormat.dimensions = (CMVideoDimensions){(int32_t)width, (int32_t)height};
+            customFormat.frameRate = frameRate > 0 ? frameRate : 30;
+            format = customFormat;
+            [self debugLog:[NSString stringWithFormat:@"videoFormatForCameraDevice: using requested format %lux%lu @ %lufps", (unsigned long)width, (unsigned long)height, (unsigned long)frameRate]];
         }
     }
 
-    // If no format specified (or couldn't find closest), use the best available
     if (format == nil) {
-        format = RCTTWVideoModuleCameraSourceSelectBestFormat(camera);
+        // Default to a safe format, but log what we found
+        NSArray<TVIVideoFormat *> *supported = [TVICameraSource supportedFormatsForDevice:camera];
+        format = supported.firstObject;
+        [self debugLog:[NSString stringWithFormat:@"videoFormatForCameraDevice: defaulting to first supported format: %@ (Total supported: %lu)", format, (unsigned long)supported.count]];
     }
-
-    // Fallback to default HD format if no format found (matches Android behavior)
-    if (format == nil) {
-        TVIVideoFormat *defaultFormat = [[TVIVideoFormat alloc] init];
-        defaultFormat.dimensions = kRCTTWVideoAppCameraSourceDimensionsDefault;
-        defaultFormat.frameRate = kRCTTWVideoCameraSourceFrameRateDefault;
-        defaultFormat.pixelFormat = TVIPixelFormatYUV420BiPlanarFullRange;
-        format = defaultFormat;
-    }
-
     return format;
 }
 
@@ -485,7 +493,7 @@ RCT_EXPORT_METHOD(toggleSoundSetup:(BOOL)speaker) {
         [session overrideOutputAudioPort:AVAudioSessionPortOverrideNone error:&error];
     }
     if (error) {
-        NSLog(@"[RCTTWVideoModule] toggleSoundSetup error: %@", error);
+        [self debugLog:[NSString stringWithFormat:@"toggleSoundSetup error: %@", error]];
     }
 }
 
@@ -546,7 +554,9 @@ RCT_REMAP_METHOD(setLocalDataTrackEnabled,
 
 
 - (void)_createVideoTrack:(NSString *)cameraType {
+    [self debugLog:[NSString stringWithFormat:@"_createVideoTrack called. cameraType=%@, existing localVideoTrack=%@, enabled=%d", cameraType, self.localVideoTrack, self.localVideoTrack.isEnabled]];
     if (self.localVideoTrack == nil) {
+        [self debugLog:@"_createVideoTrack: creating NEW track"];
         TVICameraSourceOptions *options = [TVICameraSourceOptions
                 optionsWithBlock:^(TVICameraSourceOptionsBuilder *_Nonnull builder) {
 
@@ -554,12 +564,14 @@ RCT_REMAP_METHOD(setLocalDataTrackEnabled,
         self.camera = [[TVICameraSource alloc] initWithOptions:options
                                                       delegate:self];
         if (self.camera == nil) {
+            [self debugLog:@"_createVideoTrack: camera is nil, returning"];
             return;
         }
 
         self.localVideoTrack = [TVILocalVideoTrack trackWithSource:self.camera
                                                            enabled:YES
                                                               name:@"camera"];
+        [self debugLog:[NSString stringWithFormat:@"_createVideoTrack: new track=%@, enabled=%d", self.localVideoTrack, self.localVideoTrack.isEnabled]];
 
         // Reconnect the local video view if it exists
         if (self.localVideoView != nil) {
@@ -570,8 +582,10 @@ RCT_REMAP_METHOD(setLocalDataTrackEnabled,
         // Start camera capture for the track to work
         [self startCameraCapture:cameraType];
     } else {
+        [self debugLog:[NSString stringWithFormat:@"_createVideoTrack: track ALREADY EXISTS, enabling. track=%@, wasEnabled=%d", self.localVideoTrack, self.localVideoTrack.isEnabled]];
         // Track exists but might be disabled, enable it and start capture
         [self.localVideoTrack setEnabled:YES];
+        [self debugLog:[NSString stringWithFormat:@"_createVideoTrack: after setEnabled, enabled=%d", self.localVideoTrack.isEnabled]];
 
         // Reconnect the local video view if it exists
         if (self.localVideoView != nil) {
@@ -587,20 +601,24 @@ RCT_REMAP_METHOD(setLocalDataTrackEnabled,
 
 // Toggle video track (like _toggleAudioTrack)
 - (bool)_setLocalVideoEnabled:(bool)enabled cameraType:(NSString *)cameraType {
+    [self debugLog:[NSString stringWithFormat:@"_setLocalVideoEnabled called with enabled=%d, cameraType=%@", enabled, cameraType]];
     if (enabled) {
         if (self.localVideoTrack) {
             // Track exists, just enable it
             [self.localVideoTrack setEnabled:YES];
             if (self.room && self.room.state == TVIRoomStateConnected) {
+                [self debugLog:@"_setLocalVideoEnabled: publishing existing video track to connected room"];
                 [self.room.localParticipant publishVideoTrack:self.localVideoTrack];
             }
             [self startCameraCapture:cameraType];
         } else {
             // Track doesn't exist, create, enable and publish it
+            [self debugLog:@"_setLocalVideoEnabled: track doesn't exist, calling _createVideoTrack"];
             [self _createVideoTrack:cameraType];
             if (self.localVideoTrack) {
                 [self.localVideoTrack setEnabled:YES];
                 if (self.room && self.room.state == TVIRoomStateConnected) {
+                    [self debugLog:@"_setLocalVideoEnabled: publishing NEW video track to connected room"];
                     [self.room.localParticipant publishVideoTrack:self.localVideoTrack];
                 }
                 [self startCameraCapture:cameraType];
@@ -609,6 +627,7 @@ RCT_REMAP_METHOD(setLocalDataTrackEnabled,
     } else {
         if (self.localVideoTrack) {
             // Track exists, just disable it
+            [self debugLog:@"_setLocalVideoEnabled: disabling existing video track"];
             [self.localVideoTrack setEnabled:NO];
         }
         // If track doesn't exist, do nothing
@@ -1000,8 +1019,10 @@ RCT_EXPORT_METHOD(
                                 enableNetworkQualityReporting dominantSpeakerEnabled : (BOOL)
                                         dominantSpeakerEnabled cameraType : (NSString *)
                                                 cameraType enableDataTrack : (BOOL) enableDataTrack receiveTranscriptions : (BOOL) receiveTranscriptions videoFormat : (NSDictionary *) videoFormat) {
+    [self debugLog:[NSString stringWithFormat:@"connect called: roomName=%@, enableAudio=%d, enableVideo=%d, cameraType=%@, encodingParameters=%@", roomName, enableAudio, enableVideo, cameraType, encodingParameters]];
 
     if (accessToken == nil || [accessToken length] == 0) {
+        [self debugLog:@"connect: accessToken is nil or empty, returning"];
         NSMutableDictionary *body = [@{@"error": @"Access token is required"} mutableCopy];
         [self sendEventCheckingListenerWithName:roomDidFailToConnect body:body];
         return;
@@ -1059,28 +1080,35 @@ RCT_EXPORT_METHOD(
                              builder.region = region;
                          }
 
-                         [supportedCodecs addObject:@"VP8"];
-                         if (enableH264) {
-                             TVIVideoCodec *h264Codec = [TVIH264Codec new];
-                             builder.preferredVideoCodecs = @[h264Codec];
-                             [supportedCodecs addObject:@"H264"];
-                         } else {
-                             // VP8 with optional simulcast
-                             TVIVp8Codec *vp8Codec = [[TVIVp8Codec alloc] initWithSimulcast:enableSimulcast];
-                             builder.preferredVideoCodecs = @[vp8Codec];
-                         }
+                          [self debugLog:[NSString stringWithFormat:@"connectOptions configuration: enableH264=%d, enableSimulcast=%d", enableH264, enableSimulcast]];
 
-                         if (encodingParameters[@"audioBitrate"] ||
-                             encodingParameters[@"videoBitrate"]) {
-                             NSInteger audioBitrate =
-                                     [encodingParameters[@"audioBitrate"] integerValue];
-                             NSInteger videoBitrate =
-                                     [encodingParameters[@"videoBitrate"] integerValue];
-                             builder.encodingParameters = [[TVIEncodingParameters alloc]
-                                     initWithAudioBitrate:(audioBitrate) ? audioBitrate : 40
-                                             videoBitrate:(videoBitrate) ? videoBitrate
-                                                                         : 1500];
-                         }
+                          [supportedCodecs addObject:@"VP8"];
+                          if (enableH264) {
+                              [self debugLog:@"connectOptions: preferring H264 codec"];
+                              TVIVideoCodec *h264Codec = [TVIH264Codec new];
+                              builder.preferredVideoCodecs = @[h264Codec];
+                              [supportedCodecs addObject:@"H264"];
+                          } else {
+                              [self debugLog:[NSString stringWithFormat:@"connectOptions: preferring VP8 codec (simulcast=%d)", enableSimulcast]];
+                              // VP8 with optional simulcast
+                              TVIVp8Codec *vp8Codec = [[TVIVp8Codec alloc] initWithSimulcast:enableSimulcast];
+                              builder.preferredVideoCodecs = @[vp8Codec];
+                          }
+
+                          if (encodingParameters[@"audioBitrate"] ||
+                              encodingParameters[@"videoBitrate"]) {
+                              id audioBitrateObj = encodingParameters[@"audioBitrate"];
+                              id videoBitrateObj = encodingParameters[@"videoBitrate"];
+
+                              NSInteger audioBitrate = (audioBitrateObj && ![audioBitrateObj isKindOfClass:[NSNull class]]) ? [audioBitrateObj integerValue] : 40;
+                              NSInteger videoBitrate = (videoBitrateObj && ![videoBitrateObj isKindOfClass:[NSNull class]]) ? [videoBitrateObj integerValue] : 1500;
+
+                              [self debugLog:[NSString stringWithFormat:@"connect: applying encoding parameters audio=%ld, video=%ld (0=unlimited)", (long)audioBitrate, (long)videoBitrate]];
+
+                              builder.encodingParameters = [[TVIEncodingParameters alloc]
+                                      initWithAudioBitrate:audioBitrate
+                                              videoBitrate:videoBitrate];
+                          }
 
                          if (enableNetworkQualityReporting) {
                              builder.networkQualityEnabled = true;

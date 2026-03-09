@@ -401,6 +401,17 @@ RCT_EXPORT_METHOD(startLocalVideo) {
                 [TVICameraSource captureDeviceForPosition:AVCaptureDevicePositionFront];
     }
 
+    // Check if we are already capturing with the same device to avoid "source already started" errors
+    // TVICameraSource 'device' property tells us the current active device
+    if (self.camera.device != nil && [self.camera.device.uniqueID isEqualToString:camera.uniqueID]) {
+        [self debugLog:[NSString stringWithFormat:@"startCameraCapture: already capturing with device %@, skipping startCapture call", camera.uniqueID]];
+        // Ensure mirroring is updated for existing renderers
+        for (TVIVideoView *renderer in self.localVideoTrack.renderers) {
+            [self updateLocalViewMirroring:renderer];
+        }
+        return;
+    }
+
     // Determine the video format to use
     TVIVideoFormat *format = [self videoFormatForCameraDevice:camera];
 
@@ -453,10 +464,16 @@ RCT_EXPORT_METHOD(startLocalVideo) {
     }
 
     if (format == nil) {
-        // Default to a safe format, but log what we found
-        NSArray<TVIVideoFormat *> *supported = [TVICameraSource supportedFormatsForDevice:camera];
-        format = supported.firstObject;
-        [self debugLog:[NSString stringWithFormat:@"videoFormatForCameraDevice: defaulting to first supported format: %@ (Total supported: %lu)", format, (unsigned long)supported.count]];
+        // Use a sensible default resolution (720p) instead of the absolute maximum or minimum.
+        // iPhone 12 mini supports 4K (4032x3024), but H.264 encoders for RTC typically
+        // perform better or are limited to 720p/1080p. 4K was reported to fail visibility.
+        format = RCTTWVideoModuleCameraSourceSelectFittingFormat(camera, 1280, 720, 30);
+
+        if (format == nil) {
+            // Fallback to absolute best if 720p or lower isn't found
+            format = RCTTWVideoModuleCameraSourceSelectBestFormat(camera);
+        }
+        [self debugLog:[NSString stringWithFormat:@"videoFormatForCameraDevice: selected optimal fitting format: %@", format]];
     }
     return format;
 }
@@ -1716,16 +1733,19 @@ RCT_EXPORT_METHOD(disconnect) {
 #pragma mark - TVILocalParticipantDelegate
 
 - (void)localParticipant:(TVILocalParticipant *)participant didPublishAudioTrack:(TVILocalAudioTrackPublication *)audioTrackPublication {
+    [self debugLog:[NSString stringWithFormat:@"localParticipant:didPublishAudioTrack: trackSid=%@, trackName=%@", audioTrackPublication.trackSid, audioTrackPublication.trackName]];
     NSMutableDictionary *body = [self bodyForParticipant:participant trackPublication:audioTrackPublication];
     [self sendEventCheckingListenerWithName:localAudioTrackPublished body:body];
 }
 
 - (void)localParticipant:(TVILocalParticipant *)participant didPublishVideoTrack:(TVILocalVideoTrackPublication *)videoTrackPublication {
+    [self debugLog:[NSString stringWithFormat:@"localParticipant:didPublishVideoTrack: trackSid=%@, trackName=%@", videoTrackPublication.trackSid, videoTrackPublication.trackName]];
     NSMutableDictionary *body = [self bodyForParticipant:participant trackPublication:videoTrackPublication];
     [self sendEventCheckingListenerWithName:localVideoTrackPublished body:body];
 }
 
 - (void)localParticipant:(TVILocalParticipant *)participant didPublishDataTrack:(TVILocalDataTrackPublication *)dataTrackPublication {
+    [self debugLog:[NSString stringWithFormat:@"localParticipant:didPublishDataTrack: trackSid=%@, trackName=%@", dataTrackPublication.trackSid, dataTrackPublication.trackName]];
     NSMutableDictionary *body = [self bodyForParticipant:participant trackPublication:dataTrackPublication];
     [self sendEventCheckingListenerWithName:localDataTrackPublished body:body];
 }
@@ -1733,6 +1753,7 @@ RCT_EXPORT_METHOD(disconnect) {
 - (void)localParticipant:(TVILocalParticipant *)participant
         didFailToPublishAudioTrack:(TVILocalAudioTrack *)audioTrack
                          withError:(NSError *)error {
+    [self debugLog:[NSString stringWithFormat:@"localParticipant:didFailToPublishAudioTrack: error=%@", error]];
     NSMutableDictionary *body = [self bodyForParticipant:participant trackPublication:nil];
     [self appendError:error toBody:body];
     [self sendEventCheckingListenerWithName:localAudioTrackPublicationFailed body:body];
@@ -1741,6 +1762,7 @@ RCT_EXPORT_METHOD(disconnect) {
 - (void)localParticipant:(TVILocalParticipant *)participant
         didFailToPublishVideoTrack:(TVILocalVideoTrack *)videoTrack
                          withError:(NSError *)error {
+    [self debugLog:[NSString stringWithFormat:@"localParticipant:didFailToPublishVideoTrack: error=%@", error]];
     NSMutableDictionary *body = [self bodyForParticipant:participant trackPublication:nil];
     [self appendError:error toBody:body];
     [self sendEventCheckingListenerWithName:localVideoTrackPublicationFailed body:body];
@@ -1749,6 +1771,7 @@ RCT_EXPORT_METHOD(disconnect) {
 - (void)localParticipant:(TVILocalParticipant *)participant
         didFailToPublishDataTrack:(TVILocalDataTrack *)dataTrack
                         withError:(NSError *)error {
+    [self debugLog:[NSString stringWithFormat:@"localParticipant:didFailToPublishDataTrack: error=%@", error]];
     NSMutableDictionary *body = [self bodyForParticipant:participant trackPublication:nil];
     [self appendError:error toBody:body];
     [self sendEventCheckingListenerWithName:localDataTrackPublicationFailed body:body];
